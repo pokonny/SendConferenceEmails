@@ -1,157 +1,79 @@
+import win32com.client as win32
 import tkinter as tk
 from tkinter import *
-import win32com.client as win32
-from icalendar import Calendar, Event, vCalAddress, vText
-import datetime
 
 
-# reads calendar invite, creates email_template, fills out info, then displays immage
-def read_invite(file_name, email_template):
-    # asks for ics file location opens ics file
-    cal = Calendar()
-    # Some properties are required to be compliant
-    cal.add('prodid', '-//My calendar product//example.com//')
-    cal.add('version', '2.0')
-    conf_email_temp = outlook.CreateItemFromTemplate(email_template)
-    meetorg = ''
-    meet_location = ''
-    formatted_date = ''
-    formatted_time = ''
-    # Finds the file and reads what kind it is
-    msg = r'C:\Users\pokonny\Downloads\calendar(' + file_name + ').ics'
-    e = open(msg, 'rb')
-    ecal = cal.from_ical(e.read())
+class EmailStart:
 
-    # Walks through the file and adds it to the email
-    for component in ecal.walk():
-        if component.name == 'VEVENT':
-            meetorg = component.get('organizer').replace('mailto:', '')
-            meet_location = component.get('location')
+    def __init__(self):
+        self.window = None
+        self.button = None
+        self.message = None
 
-            # Checks to see if the file contains a ; for when microsoft teams is included
-            if ';' in meet_location:
-                meet_locationa = meet_location.split(';')
-                meet_location = meet_locationa[1]
+    def __int__(self):
+        self.message = None
 
-            # Grabs meeting date and time then formats it in MM/DD/YYYY AND XX:YY AM/PM
-            conf_email_temp.To = meetorg
-            meet_date = component.decoded('dtstart')
-            formatted_date = datetime.date.strftime(meet_date, '%m/%d/%Y ')
-            formatted_time = datetime.date.strftime(meet_date, '%H:%M %p')
-            spiel = meet_location + ' on ' + formatted_date + 'at ' + formatted_time + '. '
-            conf_email_temp.Subject = 'Do you need Tech Assistance at ' + spiel
-            conf_email_temp.Body += ' ' + spiel
+    # fills out AS400 login details then displays email
+    def as400_write(self, as400_info):
+        self.message.Body += "\n"
+        c = ["Username: ", "Password: ", "AS400 Default printer: ", "Menus:\n"]
+        # iterates through the array, adds c[0] + line to email until len(c)==1 then just adds lines
+        for line in as400_info:
+            if len(c) > 0:
+                self.message.Body += c.pop(0) + line
+            else:
+                self.message.Body += line
+        self.message.Body += "\n#secure#"
+        self.message.Display()
 
-    e.close()
-    conf_email_temp.Display()
-
-
-# prompts for the file location
-def conference_email(email_template):
-    file_nume = Tk()
-    label = Label(file_nume, text="File location")
-    label.pack(side=LEFT)
-    file_name = Entry(file_nume, bd=5)
-    file_name.pack(side=LEFT)
-    b = Button(file_nume, text="Submit",
-               command=lambda: [read_invite(file_name.get(), email_template), close(file_nume)])
-    b.pack()
-    file_nume.mainloop()
-
-
-# reads user input, adds subject, inputs user input and labels, then displays message
-def as400write(message, textbox):
-    user = textbox.get("1.0", 'end').split('\n')
-    message.Subject = 'Your AS400 access has been granted.'
-    # removes recipient and cc emails from array
-    message.To = user.pop(0)
-    message.CC = user.pop(0)
-    # Adds a new line before writing
-    message.Body += "\n"
-    c = ["Username: ", "Password: ", "AS400 Default printer: ", "Menus:\n"]
-    # iterates through the array, adds c[0] + line to email until len(c)==1 then just adds lines
-    for line in user:
-        if len(c) > 0:
-            message.Body += c.pop(0) + line
+    # takes the input then puts it into an array, opens outlook, assigns first two values in email_to_cc to the To/CC
+    # field then removes them
+    def email_create(self, text_box, choice_string):
+        email_to_cc = text_box.get("1.0", 'end').split('\n')
+        outlook = win32.Dispatch('Outlook.Application')
+        self.message = outlook.CreateItemFromTemplate(choice_string)
+        self.message.To = email_to_cc.pop(0)
+        self.message.CC = email_to_cc.pop(0)
+        if len(email_to_cc) <= 1:
+            self.message.Subject = "Your Company Phone Has Been Ordered."
+            self.message.Display()
         else:
-            message.Body += line
-    message.Body += "\n#secure#"
-    message.Display()
+            self.message.Subject = "Your AS400 access has been granted."
+            self.as400_write(email_to_cc)
+
+    # creates a multi-line entry window then, on button click, calls the email_create class then destroys itself
+    def info_enter(self, choice_string):
+        self.window = Tk()
+        textbox = Text(self.window, bg="white", width=35, height=10)
+        textbox.pack(pady=8, padx=8)
+        b = Button(self.window, text="Submit", command=lambda: [self.email_create(textbox, choice_string),
+                                                                self.window.destroy()])
+        b.pack()
+        self.window.mainloop()
+
+    # creates the selector buttons that calls info_enter
+    def button_choice(self, frame_grab, tk_grab, choice_string, action_to_take):
+        if action_to_take == "quit":
+            self.button = tk.Button(frame_grab,
+                                    fg='red',
+                                    text=choice_string,
+                                    command=quit)
+            self.button.pack(side=tk_grab.LEFT, pady=10, padx=10)
+        else:
+            self.button = tk.Button(frame_grab,
+                                    text=choice_string,
+                                    command=lambda: self.info_enter(action_to_take))
+            self.button.pack(side=tk_grab.LEFT, pady=10, padx=10)
 
 
-# creates tkinter multiline entry window that takes the user's email and boss's email
-def as400_email(email_template):
-    window = Tk()
-    message = outlook.CreateItemFromTemplate(email_template)
-    textbox = Text(window, bg="white", width=35, height=10)
-    textbox.insert(tk.END, "User Email First\nBoss's Email If New Employee")
-    textbox.pack(pady=8, padx=8)
-    textbox.bind("<FocusIn>", temp_text(textbox))
-    b = Button(window, text="Submit", command=lambda: [as400write(message, textbox), close(window)])
-    b.pack()
-    window.mainloop()
-
-
-# creates a tkinter window to get input for the file location then closes the window
-def phone_email(email_template):
-    window = Tk()
-    message = outlook.CreateItemFromTemplate(email_template)
-    textbox = Text(window, bg="white", width=35, height=10)
-    textbox.insert(tk.END, "User Email First\nBoss's Email If New Employee")
-    textbox.pack(pady=8, padx=8)
-    textbox.bind("<FocusIn>", temp_text(textbox))
-    b = Button(window, text="Submit", command=lambda: [prop(message, textbox), close(window)])
-    b.pack()
-    window.mainloop()
-
-
-# gets email info
-def prop(message, textbox):
-    user = textbox.get("1.0", 'end').split('\n')
-    adressEmail = []
-    message.Subject = "Your Company Phone has been ordered."
-    for address in user:
-        adressEmail.append(address)
-
-    message.To = adressEmail[0]
-    if len(adressEmail) > 1:
-        message.CC = adressEmail[1]
-    message.Display()
-
-
-# supposed to delete entrance text
-def temp_text(textbox):
-    textbox.delete("1.0", "end")
-
-#closes window
-def close(window):
-    window.destroy()
-
-
+create_email_from_template = EmailStart()
 root = tk.Tk()
 frame = tk.Frame(root, width=300, height=300)
 frame.pack()
-
-outlook = win32.Dispatch('Outlook.Application')
-email_templates = ['C:\Template.oft', 'C:\AS400-1.oft', 'C:\PhoneOrder.oft']
 label = Label(frame, text="Choose Your Email Template")
 label.pack(pady=20)
-phone_email_template = tk.Button(frame,
-                                 text="AS400",
-                                 command=lambda: as400_email(email_templates[1]))
-phone_email_template.pack(side=tk.LEFT)
-logan = tk.Button(frame,
-                  text="Conference",
-                  command=lambda: conference_email(email_templates[0]))
-logan.pack(side=tk.LEFT)
-ogan = tk.Button(frame,
-                 text="Phone",
-                 command=lambda: phone_email(email_templates[2]))
-ogan.pack(side=tk.LEFT)
-gan = tk.Button(frame,
-                text="Quit",
-                fg="red",
-                command=quit)
-gan.pack(side=tk.LEFT)
-
+create_email_from_template.button_choice(frame, tk, "AS400", r'C:\AS400-1.oft')
+create_email_from_template.button_choice(frame, tk, "Phone", r'C:\PhoneOrder.oft')
+create_email_from_template.button_choice(frame, tk, "Quit", "quit")
+label.pack(pady=20)
 root.mainloop()
